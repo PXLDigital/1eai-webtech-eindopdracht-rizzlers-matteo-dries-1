@@ -1,30 +1,32 @@
 <?php
+// ============================================================
+// login.php — PERSOON B
+// Vereisten afgedekt:
+//   ✓ PHP server-side (sessie, password_verify)
+//   ✓ SQL SELECT uit users tabel
+//   ✓ JavaScript client-side (form validatie)
+// ============================================================
 session_start();
 
-// Al ingelogd? Stuur door naar index
-if (isset($_SESSION['user_id'])) {
-    header('Location: index.php');
-    exit;
-}
+if (isset($_SESSION['user_id'])) { header('Location: index.php'); exit; }
 
 require_once 'db.php';
 
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email    = trim($_POST['email'] ?? '');
+    $email    = trim($_POST['email']    ?? '');
     $password = $_POST['password'] ?? '';
 
     if (empty($email) || empty($password)) {
         $error = 'Vul alle velden in.';
     } else {
-        // Gebruiker opzoeken op e-mail
+        // SQL SELECT: gebruiker opzoeken op e-mail
         $stmt = $pdo->prepare("SELECT id, username, password FROM users WHERE email = ?");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
-            // Inloggen gelukt — sessie instellen
             $_SESSION['user_id']  = $user['id'];
             $_SESSION['username'] = $user['username'];
             header('Location: index.php');
@@ -43,54 +45,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Inloggen — FilmTracker</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        body {
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-
-        .login-wrap {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem 1rem;
-        }
-
-        .brand-logo {
-            display: block;
-            text-align: center;
-            font-family: var(--font-title);
-            font-size: 2rem;
-            letter-spacing: 3px;
-            color: var(--clr-accent);
-            margin-bottom: 2rem;
-        }
-
-        .brand-logo span {
-            color: var(--clr-text);
-        }
-
-        .divider {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin: 1.5rem 0;
-            color: var(--clr-muted);
-            font-size: 0.8rem;
-        }
-
-        .divider::before,
-        .divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: var(--clr-border);
-        }
+        .auth-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+        .brand-logo { display: block; text-align: center; font-family: var(--font-title); font-size: 2rem; letter-spacing: 3px; color: var(--clr-accent); margin-bottom: 2rem; }
+        .brand-logo span { color: var(--clr-text); }
     </style>
 </head>
 <body>
-
     <nav>
         <a href="index.php" class="nav-logo">FILM<span>TRACKER</span></a>
         <ul class="nav-links">
@@ -99,11 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </ul>
     </nav>
 
-    <div class="login-wrap">
-        <div style="width: 100%; max-width: 440px;">
-
+    <div class="auth-wrap">
+        <div style="width:100%; max-width:440px;">
             <a href="index.php" class="brand-logo">FILM<span>TRACKER</span></a>
-
             <div class="form-card">
                 <h1 class="form-title">Inloggen</h1>
 
@@ -111,55 +69,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
 
-                <form method="POST" action="login.php">
-
+                <form method="POST" action="login.php" id="loginForm">
                     <div class="form-group">
-                        <label class="form-label" for="email">E-mailadres</label>
-                        <input
-                            class="form-input"
-                            type="email"
-                            id="email"
-                            name="email"
-                            placeholder="jouw@email.be"
-                            value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
-                            required
-                            autofocus
-                        >
+                        <label class="form-label">E-mailadres</label>
+                        <input class="form-input" type="email" name="email" placeholder="jouw@email.be" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>" required autofocus>
                     </div>
-
                     <div class="form-group">
-                        <label class="form-label" for="password">Wachtwoord</label>
-                        <input
-                            class="form-input"
-                            type="password"
-                            id="password"
-                            name="password"
-                            placeholder="••••••••"
-                            required
-                        >
+                        <label class="form-label">Wachtwoord</label>
+                        <input class="form-input" type="password" id="password" name="password" placeholder="••••••••" required>
+                        <div class="form-error" id="pwError" style="display:none;">Vul een wachtwoord in.</div>
                     </div>
-
-                    <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.5rem;">
-                        Inloggen
-                    </button>
-
+                    <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.5rem;">Inloggen</button>
                 </form>
 
                 <div class="divider">of</div>
-
-                <div class="form-footer">
-                    Nog geen account?
-                    <a href="register.php">Registreer hier</a>
-                </div>
+                <div class="form-footer">Nog geen account? <a href="register.php">Registreer hier</a></div>
             </div>
-
         </div>
     </div>
 
-    <footer>
-        <p>FilmTracker &copy; <?= date('Y') ?> — Gemaakt als schoolproject</p>
-    </footer>
+    <footer><p>FilmTracker &copy; <?= date('Y') ?></p></footer>
 
+    <script>
+    // JavaScript: client-side validatie
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+        const pw = document.getElementById('password').value;
+        const err = document.getElementById('pwError');
+        if (!pw) {
+            e.preventDefault();
+            err.style.display = 'block';
+        } else {
+            err.style.display = 'none';
+        }
+    });
+    </script>
 </body>
 </html>
-
