@@ -8,7 +8,7 @@ define('DB_HOST', 'localhost');
 define('DB_PORT', '5432');
 define('DB_NAME', 'filmtracker');
 define('DB_USER', 'postgres');
-define('DB_PASS', 'jouw_wachtwoord'); // ← aanpassen!
+define('DB_PASS', 'admin'); // ← aanpassen!
 
 try {
     $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', DB_HOST, DB_PORT, DB_NAME);
