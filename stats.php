@@ -59,13 +59,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'charts') {
     $stmt->execute([$_SESSION['user_id']]);
     $rating_data = $stmt->fetchAll();
 
-    // SQL SELECT: films per maand (laatste 6 maanden)
+    // SQL SELECT: films per dag (laatste 3 dagen)
     $stmt = $pdo->prepare("
-        SELECT TO_CHAR(added_at, 'Mon YYYY') as maand, COUNT(*) as n
+        SELECT TO_CHAR(added_at, 'DD Mon') as maand, COUNT(*) as n
         FROM watchlist WHERE user_id = ?
-        AND added_at >= NOW() - INTERVAL '6 months'
-        GROUP BY TO_CHAR(added_at, 'Mon YYYY'), DATE_TRUNC('month', added_at)
-        ORDER BY DATE_TRUNC('month', added_at)
+        AND added_at >= NOW() - INTERVAL '3 days'
+        GROUP BY TO_CHAR(added_at, 'DD Mon'), DATE_TRUNC('day', added_at)
+        ORDER BY DATE_TRUNC('day', added_at)
     ");
     $stmt->execute([$_SESSION['user_id']]);
     $maand_data = $stmt->fetchAll();
@@ -169,7 +169,7 @@ $stats = $stmt->fetch();
             </div>
         </div>
         <div class="chart-container">
-            <div class="chart-title">Toegevoegd per maand (laatste 6 maanden)</div>
+            <div class="chart-title">Toegevoegd per dag</div>
             <canvas id="maandChart" height="100"></canvas>
         </div>
 
