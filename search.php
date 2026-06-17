@@ -11,26 +11,29 @@
 session_start();
 require_once 'db.php';
 
+// TMDB API configuratie
 define('TMDB_KEY',  'd9220da51ccdd49872dc86d6f845da79');
 define('TMDB_BASE', 'https://api.themoviedb.org/3');
 
-// ----------------------------------------------------------
 // AJAX 1: Live zoeken via jQuery $.ajax()
-// ----------------------------------------------------------
 if (isset($_GET['ajax']) && isset($_GET['q'])) {
     header('Content-Type: application/json');
     $query = trim($_GET['q']);
 
+    // Validatie: zoekterm moet minstens 2 tekens bevatten
     if (strlen($query) < 2) { echo json_encode([]); exit; }
-
+    
+    // TMDB API call: multi-search (films + series)
     $url      = TMDB_BASE . '/search/multi?api_key=' . TMDB_KEY . '&query=' . urlencode($query) . '&language=nl-BE&include_adult=false';
     $response = file_get_contents($url);
 
+    // Foutafhandeling: als TMDB niet bereikbaar is, geef een foutmelding terug
     if (!$response) { echo json_encode(['error' => 'TMDB niet bereikbaar']); exit; }
 
     $data    = json_decode($response, true);
     $results = [];
 
+    // Filter de resultaten: alleen films en series, max 8 resultaten
     foreach ($data['results'] as $item) {
         if (!in_array($item['media_type'], ['movie', 'tv'])) continue;
         $results[] = [
@@ -49,27 +52,27 @@ if (isset($_GET['ajax']) && isset($_GET['q'])) {
     exit;
 }
 
-// ----------------------------------------------------------
 // AJAX 2: Film toevoegen aan watchlist via jQuery $.ajax()
-// ----------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add') {
     header('Content-Type: application/json');
 
+    // Validatie: gebruiker moet ingelogd zijn
     if (!isset($_SESSION['user_id'])) {
         echo json_encode(['success' => false, 'message' => 'Niet ingelogd']); exit;
     }
 
+    // Validatie: tmdb_id en title zijn verplicht
     $tmdb_id = (int)($_POST['tmdb_id'] ?? 0);
     $title   = trim($_POST['title']   ?? '');
     $poster  = trim($_POST['poster']  ?? '');
-    $status  = in_array($_POST['status'] ?? '', ['plan','watching','watched']) ? $_POST['status'] : 'plan';
+    $status  = in_array($_POST['status'] ?? '', ['plan','watching','watched']) ? $_POST['status'] : 'watching';
 
     if (!$tmdb_id || !$title) {
         echo json_encode(['success' => false, 'message' => 'Ongeldige data']); exit;
     }
 
+    // SQL INSERT: film toevoegen aan watchlist, of update status als film al bestaat
     try {
-        // SQL INSERT — als film al bestaat: update status
         $stmt = $pdo->prepare("
             INSERT INTO watchlist (user_id, tmdb_id, title, poster, status)
             VALUES (?, ?, ?, ?, ?)
@@ -83,15 +86,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
     exit;
 }
 
-// ----------------------------------------------------------
 // REST API endpoint voor EXTERN APPARAAT (smartphone)
-// Smartphone stuurt: POST search.php met action=remote_add
-// Dit is de sensor-vereiste: extern apparaat communiceert via REST
-// ----------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'remote_add') {
     header('Content-Type: application/json');
-    header('Access-Control-Allow-Origin: *'); // toestaan van extern apparaat
+    header('Access-Control-Allow-Origin: *');
 
+    // Validatie: user_id, tmdb_id en title zijn verplicht
     $user_id = (int)($_POST['user_id'] ?? 0);
     $tmdb_id = (int)($_POST['tmdb_id'] ?? 0);
     $title   = trim($_POST['title']   ?? '');
@@ -102,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'remot
         echo json_encode(['success' => false, 'message' => 'Ongeldige data']); exit;
     }
 
+    // SQL INSERT: film toevoegen aan watchlist van opgegeven user_id, status standaard op 'plan'
     try {
         $stmt = $pdo->prepare("
             INSERT INTO watchlist (user_id, tmdb_id, title, poster, status)
@@ -249,11 +250,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'remot
 
             const actionsHtml = isLoggedIn ? `
                 <div class="result-actions">
-                    <select id="status-${film.id}">
-                        <option value="plan">Wil ik zien</option>
-                        <option value="watching">Bezig</option>
-                        <option value="watched">Bekeken</option>
-                    </select>
                     <button class="btn-add" id="btn-${film.id}" onclick="voegToe(${film.id}, '${escJs(film.title)}', '${escJs(film.poster || '')}')">
                         + Voeg toe
                     </button>
