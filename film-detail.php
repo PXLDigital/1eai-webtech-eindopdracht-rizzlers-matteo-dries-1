@@ -10,6 +10,7 @@
 session_start();
 require_once 'db.php';
 
+// TMDB API configuratie
 define('TMDB_KEY',  'd9220da51ccdd49872dc86d6f845da79');
 define('TMDB_BASE', 'https://api.themoviedb.org/3');
 
@@ -20,10 +21,12 @@ if (!$tmdb_id) { header('Location: search.php'); exit; }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_review') {
     header('Content-Type: application/json');
 
+    // Validatie: alleen ingelogde gebruikers kunnen reviews opslaan
     if (!isset($_SESSION['user_id'])) {
         echo json_encode(['success' => false, 'message' => 'Niet ingelogd']); exit;
     }
 
+    // Validatie: rating moet tussen 1-5 zijn
     $rating = (int)($_POST['rating'] ?? 0);
     $review = trim($_POST['review'] ?? '');
 
@@ -31,13 +34,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         echo json_encode(['success' => false, 'message' => 'Geef een rating van 1-5']); exit;
     }
 
-    // SQL UPDATE — rating en review opslaan
+    // SQL UPDATE: rating en review opslaan in watchlist
     $stmt = $pdo->prepare("
         UPDATE watchlist SET rating = ?, review = ?
         WHERE user_id = ? AND tmdb_id = ?
     ");
     $stmt->execute([$rating, $review, $_SESSION['user_id'], $tmdb_id]);
 
+    // Controleer of de update succesvol was (rowCount > 0)
     if ($stmt->rowCount() === 0) {
         echo json_encode(['success' => false, 'message' => 'Film niet in je watchlist']); exit;
     }
@@ -47,14 +51,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 }
 
 // PHP: filmdetails ophalen van TMDB API
-// We weten het type (movie/tv) liefst al van de zoekpagina, anders gokken we op 'movie'
 $type = $_GET['type'] ?? 'movie';
 if (!in_array($type, ['movie', 'tv'])) $type = 'movie';
 
+// Probeer eerst het opgegeven type (movie of tv)
 $url      = TMDB_BASE . '/' . $type . '/' . $tmdb_id . '?api_key=' . TMDB_KEY . '&language=nl-BE&append_to_response=credits';
 $response = @file_get_contents($url); // @ onderdrukt de warning bij 404
 $film     = $response ? json_decode($response, true) : null;
 
+// Als het opgegeven type niet bestaat, probeer het andere type
 if (!$film || isset($film['status_code'])) {
     // Probeer het andere type (movie <-> tv)
     $andere_type = $type === 'movie' ? 'tv' : 'movie';
@@ -63,8 +68,10 @@ if (!$film || isset($film['status_code'])) {
     $film        = $response ? json_decode($response, true) : null;
 }
 
+// Als de film of serie nog steeds niet gevonden is, redirect naar search.php
 if (!$film || isset($film['status_code'])) { header('Location: search.php'); exit; }
 
+// PHP: variabelen voor de HTML
 $titel    = $film['title'] ?? $film['name'] ?? 'Onbekend';
 $jaar     = substr($film['release_date'] ?? $film['first_air_date'] ?? '', 0, 4);
 $overview = $film['overview'] ?? '';
@@ -73,7 +80,7 @@ $genres   = array_column($film['genres'] ?? [], 'name');
 $score    = round($film['vote_average'] ?? 0, 1);
 $cast     = array_slice($film['credits']['cast'] ?? [], 0, 6);
 
-// SQL SELECT: huidige watchlist entry
+// PHP: check of de film in de watchlist van de ingelogde gebruiker staat
 $watchlist_entry = null;
 if (isset($_SESSION['user_id'])) {
     $stmt = $pdo->prepare("SELECT * FROM watchlist WHERE user_id = ? AND tmdb_id = ?");

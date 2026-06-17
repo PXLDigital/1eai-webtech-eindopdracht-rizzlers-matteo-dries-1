@@ -9,6 +9,7 @@
 // ============================================================
 session_start();
 
+// Redirect naar login.php als de gebruiker niet is ingelogd
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
     exit;
@@ -22,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $id     = (int)($_POST['id']     ?? 0);
     $status = $_POST['status'] ?? '';
 
+    // Validatie: alleen geldige statussen toestaan
     if (!in_array($status, ['plan', 'watching', 'watched'])) {
         echo json_encode(['success' => false]); exit;
     }
@@ -39,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     $id     = (int)($_POST['id']     ?? 0);
     $rating = (int)($_POST['rating'] ?? 0);
 
+    // Validatie: rating moet tussen 1 en 5 liggen
     if ($rating < 1 || $rating > 5) {
         echo json_encode(['success' => false]); exit;
     }
@@ -67,6 +70,7 @@ $filter = $_GET['filter'] ?? 'all';
 $allowed = ['all', 'plan', 'watching', 'watched'];
 if (!in_array($filter, $allowed)) $filter = 'all';
 
+// SQL SELECT: films ophalen op basis van filter
 if ($filter === 'all') {
     $stmt = $pdo->prepare("SELECT * FROM watchlist WHERE user_id = ? ORDER BY added_at DESC");
     $stmt->execute([$_SESSION['user_id']]);
@@ -76,7 +80,7 @@ if ($filter === 'all') {
 }
 $films = $stmt->fetchAll();
 
-// Tellingen voor filter tabs
+// SQL SELECT: aantal films per status voor de filter tabs
 $counts = $pdo->prepare("SELECT status, COUNT(*) as n FROM watchlist WHERE user_id = ? GROUP BY status");
 $counts->execute([$_SESSION['user_id']]);
 $tellen = ['all' => 0, 'plan' => 0, 'watching' => 0, 'watched' => 0];

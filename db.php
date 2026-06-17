@@ -1,15 +1,13 @@
 <?php
-// =============================================
-// db.php — PostgreSQL connectie via PDO
-// Gedeeld door beide personen
-// =============================================
 
+// Database configuratie
 define('DB_HOST', 'localhost');
 define('DB_PORT', '5432');
 define('DB_NAME', 'filmtracker');
 define('DB_USER', 'postgres');
 define('DB_PASS', 'admin'); // ← aanpassen!
 
+// Verbinding maken met de database
 try {
     $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', DB_HOST, DB_PORT, DB_NAME);
     $pdo = new PDO($dsn, DB_USER, DB_PASS, [
