@@ -33,6 +33,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     exit;
 }
 
+// Ajax: rating updaten
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_rating') {
+    header('Content-Type: application/json');
+    $id     = (int)($_POST['id']     ?? 0);
+    $rating = (int)($_POST['rating'] ?? 0);
+
+    if ($rating < 1 || $rating > 5) {
+        echo json_encode(['success' => false]); exit;
+    }
+
+    // SQL UPDATE
+    $stmt = $pdo->prepare("UPDATE watchlist SET rating = ? WHERE id = ? AND user_id = ?");
+    $stmt->execute([$rating, $id, $_SESSION['user_id']]);
+    echo json_encode(['success' => true]);
+    exit;
+}
+
 // Ajax: film verwijderen
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
     header('Content-Type: application/json');
@@ -94,6 +111,10 @@ foreach ($counts->fetchAll() as $r) {
         .wl-delete { width: 100%; padding: 0.3rem; background: transparent; border: 1px solid var(--clr-border); border-radius: var(--radius-sm); color: var(--clr-muted); font-size: 0.75rem; cursor: pointer; transition: all var(--transition); font-family: var(--font-body); }
         .wl-delete:hover { background: var(--clr-red); border-color: var(--clr-red); color: white; }
         .wl-rating { font-size: 0.78rem; color: var(--clr-accent); margin-bottom: 0.4rem; }
+        .wl-stars { display: flex; gap: 2px; margin-bottom: 0.5rem; }
+        .wl-star { font-size: 1.1rem; color: var(--clr-border); cursor: pointer; transition: color var(--transition), transform var(--transition); user-select: none; }
+        .wl-star.filled { color: var(--clr-accent); }
+        .wl-star:hover { transform: scale(1.15); }
         .wl-added { font-size: 0.72rem; color: var(--clr-muted); }
     </style>
 </head>
@@ -144,9 +165,12 @@ foreach ($counts->fetchAll() as $r) {
                         <?php endif; ?>
                         <div class="wl-body">
                             <div class="wl-title" title="<?= htmlspecialchars($film['title']) ?>"><?= htmlspecialchars($film['title']) ?></div>
-                            <?php if ($film['rating']): ?>
-                                <div class="wl-rating"><?= str_repeat('★', $film['rating']) ?><?= str_repeat('☆', 5 - $film['rating']) ?></div>
-                            <?php endif; ?>
+                            <?php $r = (int)($film['rating'] ?? 0); ?>
+                            <div class="wl-stars" data-id="<?= $film['id'] ?>">
+                                <?php for ($i = 1; $i <= 5; $i++): ?>
+                                    <span class="wl-star <?= $i <= $r ? 'filled' : '' ?>" data-val="<?= $i ?>">★</span>
+                                <?php endfor; ?>
+                            </div>
                             <!-- jQuery Ajax: status wijzigen -->
                             <select class="wl-select status-select" data-id="<?= $film['id'] ?>">
                                 <option value="plan"     <?= $film['status'] === 'plan'     ? 'selected' : '' ?>>Wil ik zien</option>
@@ -166,6 +190,29 @@ foreach ($counts->fetchAll() as $r) {
     <footer><p>FilmTracker &copy; <?= date('Y') ?></p></footer>
 
     <script>
+    // jQuery Ajax: rating wijzigen via klikbare sterren
+    $(document).on('click', '.wl-star', function() {
+        const container = $(this).closest('.wl-stars');
+        const id     = container.data('id');
+        const rating = $(this).data('val');
+
+        // Visuele update direct
+        container.find('.wl-star').each(function() {
+            $(this).toggleClass('filled', $(this).data('val') <= rating);
+        });
+
+        $.ajax({
+            url: 'watchlist.php',
+            method: 'POST',
+            data: { action: 'update_rating', id: id, rating: rating },
+            dataType: 'json',
+            success: function(data) {
+                if (data.success) toonToast('Rating opgeslagen!', false);
+                else toonToast('Fout bij opslaan.', true);
+            }
+        });
+    });
+
     // jQuery Ajax: status wijzigen
     $(document).on('change', '.status-select', function() {
         const id     = $(this).data('id');

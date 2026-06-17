@@ -260,7 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'remot
                 </div>` : '';
 
             const card = `
-                <a class="result-card" href="film-detail.php?id=${film.id}" style="text-decoration:none; color:inherit;">
+                <a class="result-card" href="film-detail.php?id=${film.id}&type=${film.type}" style="text-decoration:none; color:inherit;">
                     ${poster}
                     <div class="result-body">
                         <div class="result-title">${escHtml(film.title)}</div>
