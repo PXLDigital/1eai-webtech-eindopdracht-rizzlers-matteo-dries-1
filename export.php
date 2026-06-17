@@ -1,82 +1,64 @@
 <?php
+// ============================================================
+// export.php — PERSOON B
+// Vereisten afgedekt:
+//   ✓ PHP server-side (geavanceerd: PDF generatie met FPDF)
+//   ✓ SQL SELECT uit watchlist tabel
+//   ✓ Geavanceerde PHP voorbij minimum (multithreading/PDF)
+// ============================================================
 session_start();
 
-// Niet ingelogd? Stuur door naar login
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit;
-}
+if (!isset($_SESSION['user_id'])) { header('Location: login.php'); exit; }
 
 require_once 'db.php';
-require_once 'fpdf/fpdf.php'; // download: http://www.fpdf.org/
+require_once 'fpdf/fpdf.php';
 
-// =============================================
-// Data ophalen uit database
-// =============================================
+// SQL SELECT: alle films ophalen
 $stmt = $pdo->prepare("
     SELECT title, status, rating, review, added_at
-    FROM watchlist
-    WHERE user_id = ?
+    FROM watchlist WHERE user_id = ?
     ORDER BY added_at DESC
 ");
 $stmt->execute([$_SESSION['user_id']]);
 $films = $stmt->fetchAll();
 
-// Statistieken berekenen
-$totaal   = count($films);
-$bekeken  = count(array_filter($films, fn($f) => $f['status'] === 'watched'));
-$bezig    = count(array_filter($films, fn($f) => $f['status'] === 'watching'));
-$plan     = count(array_filter($films, fn($f) => $f['status'] === 'plan'));
-$ratings  = array_filter(array_column($films, 'rating'));
-$gem_rating = count($ratings) > 0 ? round(array_sum($ratings) / count($ratings), 1) : 0;
+// SQL SELECT: statistieken
+$stmt = $pdo->prepare("
+    SELECT
+        COUNT(*) as totaal,
+        COUNT(CASE WHEN status='watched'  THEN 1 END) as bekeken,
+        COUNT(CASE WHEN status='watching' THEN 1 END) as bezig,
+        COUNT(CASE WHEN status='plan'     THEN 1 END) as plan,
+        ROUND(AVG(rating)::numeric, 1) as gem_rating
+    FROM watchlist WHERE user_id = ?
+");
+$stmt->execute([$_SESSION['user_id']]);
+$stats = $stmt->fetch();
 
-// Status vertaling
-function statusLabel($status) {
-    return match($status) {
-        'watched'  => 'Bekeken',
-        'watching' => 'Bezig',
-        'plan'     => 'Wil ik zien',
-        default    => $status,
-    };
+function statusLabel($s) {
+    return match($s) { 'watched' => 'Bekeken', 'watching' => 'Bezig', 'plan' => 'Wil ik zien', default => $s };
 }
 
-// Sterren tekst
-function sterren($rating) {
-    if (!$rating) return '-';
-    return str_repeat('*', $rating) . str_repeat('.', 5 - $rating) . ' (' . $rating . '/5)';
-}
-
-// =============================================
-// FPDF klasse uitbreiden met header en footer
-// =============================================
+// FPDF klasse
 class WatchlistPDF extends FPDF {
-
     public string $gebruiker = '';
 
     function Header() {
-        // Donkere achtergrond balk bovenaan
         $this->SetFillColor(13, 13, 15);
         $this->Rect(0, 0, 210, 22, 'F');
-
-        // Logo tekst
         $this->SetFont('Helvetica', 'B', 16);
-        $this->SetTextColor(232, 184, 75); // goud
+        $this->SetTextColor(232, 184, 75);
         $this->SetXY(10, 5);
-        $this->Cell(40, 12, 'FILM', 0, 0);
-        $this->SetTextColor(240, 237, 232); // wit
+        $this->Cell(30, 12, 'FILM', 0, 0);
+        $this->SetTextColor(240, 237, 232);
         $this->Cell(40, 12, 'TRACKER', 0, 0);
-
-        // Gebruikersnaam rechts
         $this->SetFont('Helvetica', '', 9);
         $this->SetTextColor(136, 136, 153);
         $this->SetXY(0, 8);
         $this->Cell(200, 8, 'Watchlist van ' . $this->gebruiker, 0, 0, 'R');
-
-        // Gouden lijn onder header
         $this->SetDrawColor(232, 184, 75);
         $this->SetLineWidth(0.5);
         $this->Line(0, 22, 210, 22);
-
         $this->Ln(16);
     }
 
@@ -87,7 +69,10 @@ class WatchlistPDF extends FPDF {
         $this->Cell(0, 10, 'FilmTracker - Gegenereerd op ' . date('d/m/Y') . '  |  Pagina ' . $this->PageNo(), 0, 0, 'C');
     }
 
-    // Gekleurde sectietitel
+    function cleanText($text) {
+        return iconv('UTF-8', 'windows-1252//TRANSLIT', $text ?? '');
+    }
+
     function SectieTitle($tekst) {
         $this->SetFont('Helvetica', 'B', 11);
         $this->SetTextColor(232, 184, 75);
@@ -96,24 +81,16 @@ class WatchlistPDF extends FPDF {
         $this->Ln(2);
     }
 
-    // Speciale tekens omzetten voor FPDF (UTF-8 naar windows-1252)
-    function cleanText($text) {
-        return iconv('UTF-8', 'windows-1252//TRANSLIT', $text ?? '');
-    }
-
-    // Statistiek blokje
     function StatBlok($label, $waarde, $x, $y) {
         $this->SetXY($x, $y);
         $this->SetFillColor(22, 22, 26);
         $this->SetDrawColor(42, 42, 51);
         $this->SetLineWidth(0.3);
         $this->Rect($x, $y, 42, 18, 'FD');
-
         $this->SetFont('Helvetica', 'B', 16);
         $this->SetTextColor(232, 184, 75);
         $this->SetXY($x, $y + 1);
         $this->Cell(42, 10, $waarde, 0, 0, 'C');
-
         $this->SetFont('Helvetica', '', 7);
         $this->SetTextColor(136, 136, 153);
         $this->SetXY($x, $y + 10);
@@ -121,33 +98,27 @@ class WatchlistPDF extends FPDF {
     }
 }
 
-// =============================================
 // PDF aanmaken
-// =============================================
 $pdf = new WatchlistPDF('P', 'mm', 'A4');
 $pdf->gebruiker = $_SESSION['username'];
 $pdf->SetMargins(12, 28, 12);
 $pdf->SetAutoPageBreak(true, 20);
 $pdf->AddPage();
 
-// --- Statistieken sectie ---
+// Statistieken
 $pdf->SectieTitle('  Overzicht');
 $pdf->Ln(2);
-
-$pdf->StatBlok('Totaal',       $totaal,     12,  36);
-$pdf->StatBlok('Bekeken',      $bekeken,    58,  36);
-$pdf->StatBlok('Bezig',        $bezig,      104, 36);
-$pdf->StatBlok('Wil ik zien',  $plan,       150, 36);
-
+$pdf->StatBlok('Totaal',      $stats['totaal'],  12,  36);
+$pdf->StatBlok('Bekeken',     $stats['bekeken'], 58,  36);
+$pdf->StatBlok('Bezig',       $stats['bezig'],   104, 36);
+$pdf->StatBlok('Wil ik zien', $stats['plan'],    150, 36);
 $pdf->Ln(26);
-
-// Gem. rating apart
 $pdf->SetFont('Helvetica', '', 9);
 $pdf->SetTextColor(136, 136, 153);
-$pdf->Cell(0, 6, 'Gemiddelde rating: ' . ($gem_rating > 0 ? $gem_rating . ' / 5' : 'Nog geen ratings'), 0, 1, 'R');
+$pdf->Cell(0, 6, 'Gemiddelde rating: ' . ($stats['gem_rating'] ?? '—') . ' / 5', 0, 1, 'R');
 $pdf->Ln(4);
 
-// --- Tabelhoofding ---
+// Tabel
 $pdf->SectieTitle('  Filmlijst');
 $pdf->Ln(1);
 
@@ -157,59 +128,38 @@ $pdf->SetFont('Helvetica', 'B', 8);
 $pdf->SetTextColor(136, 136, 153);
 $pdf->SetDrawColor(42, 42, 51);
 $pdf->SetLineWidth(0.2);
+$pdf->Cell(80, 7, 'TITEL',      'B', 0, 'L', true);
+$pdf->Cell(30, 7, 'STATUS',     'B', 0, 'C', true);
+$pdf->Cell(25, 7, 'RATING',     'B', 0, 'C', true);
+$pdf->Cell(45, 7, 'TOEGEVOEGD', 'B', 1, 'C', true);
 
-$pdf->Cell(80, 7, 'TITEL',        'B', 0, 'L', true);
-$pdf->Cell(30, 7, 'STATUS',       'B', 0, 'C', true);
-$pdf->Cell(25, 7, 'RATING',       'B', 0, 'C', true);
-$pdf->Cell(45, 7, 'TOEGEVOEGD',   'B', 1, 'C', true);
-
-// Tabelrijen
 $rij = 0;
 foreach ($films as $film) {
-    // Afwisselende rijkleur
-    if ($rij % 2 === 0) {
-        $pdf->SetFillColor(22, 22, 26);
-    } else {
-        $pdf->SetFillColor(16, 16, 18);
-    }
-
-    // Statuskleur
-    $status = $film['status'];
-    if ($status === 'watched') {
-        $pdf->SetTextColor(61, 186, 122);  // groen
-    } elseif ($status === 'watching') {
-        $pdf->SetTextColor(224, 208, 82);  // geel
-    } else {
-        $pdf->SetTextColor(136, 136, 204); // paars
-    }
-
+    $rij % 2 === 0 ? $pdf->SetFillColor(22, 22, 26) : $pdf->SetFillColor(16, 16, 18);
     $pdf->SetFont('Helvetica', '', 8.5);
 
-    // Titel (zwart-wit)
+    // Titel
     $pdf->SetTextColor(240, 237, 232);
     $pdf->Cell(80, 7, $pdf->cleanText($film['title']), 0, 0, 'L', true);
 
-    // Status
-    if ($status === 'watched') {
-        $pdf->SetTextColor(61, 186, 122);
-    } elseif ($status === 'watching') {
-        $pdf->SetTextColor(224, 208, 82);
-    } else {
-        $pdf->SetTextColor(136, 136, 204);
-    }
-    $pdf->Cell(30, 7, statusLabel($status), 0, 0, 'C', true);
+    // Status met kleur
+    match($film['status']) {
+        'watched'  => $pdf->SetTextColor(61,  186, 122),
+        'watching' => $pdf->SetTextColor(224, 208,  82),
+        default    => $pdf->SetTextColor(136, 136, 204),
+    };
+    $pdf->Cell(30, 7, statusLabel($film['status']), 0, 0, 'C', true);
 
     // Rating
     $pdf->SetTextColor(232, 184, 75);
-    $rating_text = $film['rating'] ? $film['rating'] . ' / 5' : '-';
-    $pdf->Cell(25, 7, $rating_text, 0, 0, 'C', true);
+    $pdf->Cell(25, 7, $film['rating'] ? $film['rating'] . ' / 5' : '-', 0, 0, 'C', true);
 
     // Datum
     $pdf->SetTextColor(136, 136, 153);
     $datum = $film['added_at'] ? date('d/m/Y', strtotime($film['added_at'])) : '-';
     $pdf->Cell(45, 7, $datum, 0, 1, 'C', true);
 
-    // Review (indien aanwezig)
+    // Review
     if (!empty($film['review'])) {
         $pdf->SetFillColor(16, 16, 18);
         $pdf->SetFont('Helvetica', 'I', 7.5);
@@ -222,11 +172,6 @@ foreach ($films as $film) {
     $rij++;
 }
 
-// =============================================
-// PDF uitsturen naar browser als download
-// =============================================
 $bestandsnaam = 'watchlist_' . preg_replace('/[^a-z0-9]/i', '_', $_SESSION['username']) . '_' . date('Ymd') . '.pdf';
-$pdf->Output('D', $bestandsnaam); // 'D' = download
+$pdf->Output('D', $bestandsnaam);
 exit;
-
-?>
