@@ -260,7 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'remot
                 </div>` : '';
 
             const card = `
-                <div class="result-card">
+                <a class="result-card" href="film-detail.php?id=${film.id}&type=${film.type}" style="text-decoration:none; color:inherit;">
                     ${poster}
                     <div class="result-body">
                         <div class="result-title">${escHtml(film.title)}</div>
@@ -272,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'remot
                         ${film.overview ? `<div class="result-overview">${escHtml(film.overview)}</div>` : ''}
                         ${actionsHtml}
                     </div>
-                </div>`;
+                </a>`;
             $('#resultsGrid').append(card);
         });
     }

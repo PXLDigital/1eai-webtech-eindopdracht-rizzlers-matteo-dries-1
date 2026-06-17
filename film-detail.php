@@ -47,18 +47,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 }
 
 // PHP: filmdetails ophalen van TMDB API
-$url      = TMDB_BASE . '/movie/' . $tmdb_id . '?api_key=' . TMDB_KEY . '&language=nl-BE&append_to_response=credits';
-$response = file_get_contents($url);
+// We weten het type (movie/tv) liefst al van de zoekpagina, anders gokken we op 'movie'
+$type = $_GET['type'] ?? 'movie';
+if (!in_array($type, ['movie', 'tv'])) $type = 'movie';
+
+$url      = TMDB_BASE . '/' . $type . '/' . $tmdb_id . '?api_key=' . TMDB_KEY . '&language=nl-BE&append_to_response=credits';
+$response = @file_get_contents($url); // @ onderdrukt de warning bij 404
 $film     = $response ? json_decode($response, true) : null;
 
 if (!$film || isset($film['status_code'])) {
-    // Probeer als TV serie
-    $url      = TMDB_BASE . '/tv/' . $tmdb_id . '?api_key=' . TMDB_KEY . '&language=nl-BE';
-    $response = file_get_contents($url);
-    $film     = $response ? json_decode($response, true) : null;
+    // Probeer het andere type (movie <-> tv)
+    $andere_type = $type === 'movie' ? 'tv' : 'movie';
+    $url         = TMDB_BASE . '/' . $andere_type . '/' . $tmdb_id . '?api_key=' . TMDB_KEY . '&language=nl-BE&append_to_response=credits';
+    $response    = @file_get_contents($url);
+    $film        = $response ? json_decode($response, true) : null;
 }
 
-if (!$film) { header('Location: search.php'); exit; }
+if (!$film || isset($film['status_code'])) { header('Location: search.php'); exit; }
 
 $titel    = $film['title'] ?? $film['name'] ?? 'Onbekend';
 $jaar     = substr($film['release_date'] ?? $film['first_air_date'] ?? '', 0, 4);
